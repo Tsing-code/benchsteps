@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>BenchSteps</title>
+  <meta name="description" content="Step-by-step lab protocols for the bench.">
+  <meta name="theme-color" content="#0f766e">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="banner" role="status" aria-live="assertive"></div>
+  <div id="app"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="pasteDlg">
+    <form method="dialog">
+      <h2>Paste steps</h2>
+      <p class="muted">One step per line. Leading numbers and bullets are removed.</p>
+      <textarea id="pasteText" rows="9" placeholder="1. Thaw samples on ice&#10;2. Vortex 5 s&#10;3. Spin 1 min at 12,000 g"></textarea>
+      <div class="dlg-actions">
+        <button value="cancel" class="btn ghost">Cancel</button>
+        <button value="add" class="btn primary">Add steps</button>
+      </div>
+    </form>
+  </dialog>
+
+  <noscript>BenchSteps needs JavaScript to run.</noscript>
+  <script src="app.js"></script>
+</body>
+</html>
