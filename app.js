@@ -81,7 +81,11 @@ function save() {
 const getP = id => store.protocols.find(p => p.id === id);
 function getRun(pid) { return store.runs[pid] ||= { checked: {}, timers: {}, current: 0 }; }
 const sortedProtocols = () => [...store.protocols].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
-const doneCount = p => { const r = store.runs[p.id]; return r ? p.steps.filter(s => r.checked[s.id]).length : 0; };
+// Progress counts required steps only; optional steps never block finishing.
+const reqCount = p => p.steps.filter(s => !s.optional).length;
+const doneCount = p => { const r = store.runs[p.id]; return r ? p.steps.filter(s => !s.optional && r.checked[s.id]).length : 0; };
+const tickedCount = p => { const r = store.runs[p.id]; return r ? p.steps.filter(s => r.checked[s.id]).length : 0; };
+const OPT_TAG = '<span class="opt-tag">Optional</span>';
 const totalMinutes = p => p.steps.reduce((a, s) => a + (s.minutes || 0), 0);
 
 function sanitizeProtocol(p) {
@@ -89,7 +93,7 @@ function sanitizeProtocol(p) {
   const steps = (Array.isArray(p.steps) ? p.steps : []).map(s => {
     if (typeof s === 'string') s = { text: s };
     const m = Number(s?.minutes);
-    return { id: String(s?.id || uid()), text: String(s?.text ?? '').trim(), note: String(s?.note ?? '').trim(), minutes: m > 0 ? m : undefined };
+    return { id: String(s?.id || uid()), text: String(s?.text ?? '').trim(), note: String(s?.note ?? '').trim(), minutes: m > 0 ? m : undefined, optional: s?.optional ? true : undefined };
   }).filter(s => s.text);
   const title = String(p.title ?? '').trim();
   if (!title) return null;
@@ -239,13 +243,14 @@ function renderList() {
   const q = homeQuery.trim().toLowerCase();
   const items = sortedProtocols().filter(p => !q || (p.title + ' ' + p.description + ' ' + p.steps.map(s => s.text).join(' ')).toLowerCase().includes(q));
   $('#list').innerHTML = items.length ? items.map(p => {
-    const n = p.steps.length, c = doneCount(p), mins = totalMinutes(p);
+    const n = p.steps.length, rn = reqCount(p), c = doneCount(p), started = tickedCount(p) > 0, mins = totalMinutes(p);
+    const opt = n - rn;
     return `<a class="card" href="#/p/${encodeURIComponent(p.id)}">
       <h2>${esc(p.title)}</h2>
       ${p.description ? `<p>${esc(p.description)}</p>` : ''}
-      <div class="meta"><span>${plural(n, 'step')}</span>${mins ? `<span>⏱ ${minLabel(Math.round(mins * 10) / 10)} timed</span>` : ''}
-        ${c ? `<span class="badge">In progress · ${c}/${n}</span>` : ''}</div>
-      ${c ? `<div class="progress"><div style="width:${(c / n) * 100}%"></div></div>` : ''}
+      <div class="meta"><span>${plural(n, 'step')}${opt ? ` (${opt} optional)` : ''}</span>${mins ? `<span>⏱ ${minLabel(Math.round(mins * 10) / 10)} timed</span>` : ''}
+        ${started ? `<span class="badge">In progress · ${c}/${rn}</span>` : ''}</div>
+      ${started ? `<div class="progress"><div style="width:${rn ? (c / rn) * 100 : 100}%"></div></div>` : ''}
     </a>`;
   }).join('') : `<div class="empty">${q ? 'No protocols match your search.' : 'No protocols yet.<br>Tap <b>＋ New</b> to add one.'}</div>`;
 }
@@ -279,11 +284,11 @@ function runView(p) {
       <div class="awake-row">${awakeBtn()}</div>
     </section>
     ${p.steps.length ? `<ol class="steps">${p.steps.map((s, i) => `
-      <li class="step" data-sid="${s.id}">
-        <button class="check" data-a="toggle" data-sid="${s.id}" aria-label="Step ${i + 1} done">${CHECK}</button>
+      <li class="step${s.optional ? ' optional' : ''}" data-sid="${s.id}">
+        <button class="check" data-a="toggle" data-sid="${s.id}" aria-label="Step ${i + 1}${s.optional ? ' (optional)' : ''} done">${CHECK}</button>
         <div>
           <div class="step-body" data-a="toggle" data-sid="${s.id}">
-            <div class="step-text"><span class="num">${i + 1}</span>${esc(s.text)}</div>
+            <div class="step-text"><span class="num">${i + 1}</span>${s.optional ? OPT_TAG : ''}${esc(s.text)}</div>
             ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
           </div>
           <div class="timer-slot"></div>
@@ -291,7 +296,7 @@ function runView(p) {
         <button class="icon-btn sm" data-a="focusAt" data-i="${i}" aria-label="Focus on step ${i + 1}" title="Focus on this step">⛶</button>
       </li>`).join('')}</ol>`
       : `<div class="empty">This protocol has no steps yet.<br><a class="link" href="#/p/${encodeURIComponent(p.id)}/edit">Add some</a></div>`}
-    <div id="finish" class="finish" hidden><p>All steps ticked 🎉</p><button class="btn primary" data-a="finish">Finish &amp; log run</button></div>
+    <div id="finish" class="finish" hidden><p>All required steps ticked 🎉</p><button class="btn primary" data-a="finish">Finish &amp; log run</button></div>
   </div>`;
   refreshRun();
   if (pendingScroll) {
@@ -301,24 +306,26 @@ function runView(p) {
 }
 function refreshRun() {
   const p = getP(view.pid); if (!p) return;
-  const run = getRun(p.id), n = p.steps.length;
-  let c = 0;
+  const run = getRun(p.id), n = p.steps.length, rn = reqCount(p), opt = n - rn;
   $$('.step').forEach(li => {
     const s = p.steps.find(x => x.id === li.dataset.sid); if (!s) return;
-    const d = !!run.checked[s.id]; if (d) c++;
+    const d = !!run.checked[s.id];
     li.classList.toggle('done', d);
     $('.check', li).setAttribute('aria-pressed', d);
     $('.timer-slot', li).innerHTML = timerHTML(p.id, s);
   });
-  $('#prog-text').textContent = `${c} of ${plural(n, 'step')} done`;
-  $('#prog-bar').style.width = n ? `${(c / n) * 100}%` : '0';
-  $('#finish').hidden = !(n && c === n);
+  const c = doneCount(p), t = tickedCount(p);
+  $('#prog-text').textContent = opt
+    ? `${c} of ${rn} required done · ${opt} optional`
+    : `${c} of ${plural(n, 'step')} done`;
+  $('#prog-bar').style.width = rn ? `${(c / rn) * 100}%` : (t ? '100%' : '0');
+  $('#finish').hidden = !(n && c === rn && t > 0);
 }
 
 /* ---------- focus mode ---------- */
 function focusStart(p) {
   const run = getRun(p.id);
-  const i = p.steps.findIndex(s => !run.checked[s.id]);
+  const i = p.steps.findIndex(s => !s.optional && !run.checked[s.id]); // resume at first unticked required step
   run.current = i < 0 ? 0 : i; save();
 }
 function focusView(p) {
@@ -342,17 +349,17 @@ function renderFocus() {
   }
   run.current = Math.min(Math.max(run.current || 0, 0), n);
   const i = run.current;
-  const c = doneCount(p);
+  const c = doneCount(p), rn = reqCount(p), skippedOpt = n - rn - (tickedCount(p) - c);
   if (i >= n) {
-    const missing = n - c;
+    const missing = rn - c;
     app.innerHTML = `<div class="focus" style="--scale:${scale}">${top}
       <div class="progress"><div style="width:100%"></div></div>
       <main class="focus-main"><div class="focus-inner complete">
         <div class="big">${missing ? 'End of protocol' : 'Protocol complete 🎉'}</div>
-        <div class="focus-note">${missing ? `${plural(missing, 'step')} not ticked.` : `All ${plural(n, 'step')} done.`}</div>
+        <div class="focus-note">${missing ? `${plural(missing, 'required step')} not ticked.` : `All ${plural(rn, 'required step')} done.`}${skippedOpt > 0 ? ` ${plural(skippedOpt, 'optional step')} skipped.` : ''}</div>
         <div class="stack">
           <button class="btn primary" data-a="finish">Finish &amp; log run</button>
-          ${missing ? '<button class="btn" data-a="firstMissing">Go to first unticked step</button>' : ''}
+          ${missing ? '<button class="btn" data-a="firstMissing">Go to first unticked required step</button>' : ''}
           <button class="btn ghost" data-a="prev">‹ Back to last step</button>
           <button class="btn ghost" data-a="exit">Show checklist</button>
         </div></div></main></div>`;
@@ -360,9 +367,9 @@ function renderFocus() {
   }
   const s = p.steps[i], done = !!run.checked[s.id], next = p.steps[i + 1];
   app.innerHTML = `<div class="focus${done ? ' is-done-step' : ''}" style="--scale:${scale}">${top}
-    <div class="progress"><div style="width:${(c / n) * 100}%"></div></div>
+    <div class="progress"><div style="width:${rn ? (c / rn) * 100 : 0}%"></div></div>
     <main class="focus-main"><div class="focus-inner">
-      <div class="focus-count">Step ${i + 1} of ${n}${done ? ' · ✔ done' : ''}</div>
+      <div class="focus-count">Step ${i + 1} of ${n}${s.optional ? ' · Optional' : ''}${done ? ' · ✔ done' : ''}</div>
       <div class="focus-text">${esc(s.text)}</div>
       ${s.note ? `<div class="focus-note">${esc(s.note)}</div>` : ''}
       <div class="timer-slot">${timerHTML(p.id, s)}</div>
@@ -398,6 +405,7 @@ function syncDraft() {
     s.note = $('.se-note', li).value;
     const m = parseFloat($('.se-minutes', li).value);
     s.minutes = m > 0 ? m : undefined;
+    s.optional = $('.se-optional', li).checked || undefined;
   });
 }
 function autosize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 4 + 'px'; }
@@ -413,6 +421,7 @@ function renderEditor() {
     <ol class="edit-steps">${draft.steps.map((s, i) => `
       <li class="step-edit">
         <div class="se-head"><span class="num">Step ${i + 1}</span>
+          <label class="se-opt"><input type="checkbox" class="se-optional" ${s.optional ? 'checked' : ''}> Optional</label>
           <div class="se-tools">
             <button class="icon-btn sm" data-a="up" data-i="${i}" aria-label="Move up" ${i === 0 ? 'disabled' : ''}>↑</button>
             <button class="icon-btn sm" data-a="down" data-i="${i}" aria-label="Move down" ${i === draft.steps.length - 1 ? 'disabled' : ''}>↓</button>
@@ -648,7 +657,7 @@ const A = {
   skip() { const p = getP(view.pid), run = getRun(p.id); run.current = Math.min(run.current + 1, p.steps.length); save(); renderFocus(); },
   prev() { const run = getRun(view.pid), n = getP(view.pid).steps.length; run.current = Math.max(0, Math.min(run.current, n) - 1); save(); renderFocus(); },
   undo() { const p = getP(view.pid), run = getRun(p.id), s = p.steps[run.current]; if (s) delete run.checked[s.id]; save(); renderFocus(); },
-  firstMissing() { const p = getP(view.pid), run = getRun(p.id); run.current = Math.max(0, p.steps.findIndex(s => !run.checked[s.id])); save(); renderFocus(); },
+  firstMissing() { const p = getP(view.pid), run = getRun(p.id); run.current = Math.max(0, p.steps.findIndex(s => !s.optional && !run.checked[s.id])); save(); renderFocus(); },
   bigger() { store.prefs.scale = Math.min(1.9, +((store.prefs.scale || 1) + 0.15).toFixed(2)); save(); renderFocus(); },
   smaller() { store.prefs.scale = Math.max(0.7, +((store.prefs.scale || 1) - 0.15).toFixed(2)); save(); renderFocus(); },
 

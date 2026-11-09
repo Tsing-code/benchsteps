@@ -1,6 +1,6 @@
 // Offline cache. Serves cached files instantly and refreshes them in the background,
 // so a new deploy shows up the second time the app is opened. Bump VERSION to force a clean cache.
-const VERSION = 'benchsteps-v2';
+const VERSION = 'benchsteps-v3';
 const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png'];
 

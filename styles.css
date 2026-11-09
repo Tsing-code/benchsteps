@@ -209,6 +209,14 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .se-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .se-head .num { font-weight: 800; color: var(--accent); padding-left: 4px; }
 .se-tools { display: flex; gap: 2px; }
+.se-opt { margin-left: auto; margin-right: 6px; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 8px; font-weight: 600; color: var(--muted); }
+.se-opt input { width: 22px; height: 22px; accent-color: var(--accent); }
+.opt-tag {
+  display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 99px;
+  border: 1px dashed var(--muted); color: var(--muted);
+  font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: .12em;
+}
+.step.optional { border-style: dashed; }
 .se-extra { display: grid; grid-template-columns: 1fr 112px; gap: 8px; margin-top: 8px; }
 .add-row { display: flex; gap: 10px; margin: 14px 0; flex-wrap: wrap; }
 .add-row .btn { flex: 1; }
