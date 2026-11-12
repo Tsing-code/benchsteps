@@ -29,7 +29,9 @@ Then open <http://localhost:8080>. (Service workers need `http://localhost` or `
 2. Repo → **Settings → Pages** → *Deploy from a branch* → `main` / `(root)`.
 3. Open `https://<your-username>.github.io/<repo>/` on your Android phone in Chrome → menu → **Install app** / **Add to Home screen**.
 
-All paths are relative, so it works under the `/<repo>/` sub-path. After you push an update, open the app twice to pick it up (the first open serves the cached copy and refreshes it in the background). Bump `VERSION` in `sw.js` if you ever need to force-clear the cache.
+All paths are relative, so it works under the `/<repo>/` sub-path. After you push an update, open the app twice to pick it up (the first open serves the cached copy and refreshes it in the background), or use ⚙ Settings → **Check for updates**.
+
+**Releasing:** bump `APP_VERSION` in `version.js` on every release. It is the only place to change: it's shown in the app (home screen footer and Settings → About) and it names the offline cache, so devices know to refresh.
 
 ## Syncing protocols between devices
 

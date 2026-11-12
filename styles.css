@@ -105,6 +105,8 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .meta { font-size: .88rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .badge { color: var(--accent); font-weight: 700; }
 .empty { text-align: center; padding: 48px 16px; color: var(--muted); }
+.ver { text-align: center; margin: 24px 0 0; font-size: .85rem; }
+.ver a { color: var(--muted); }
 .foot { text-align: center; margin-top: 24px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; }
 
 .progress { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }

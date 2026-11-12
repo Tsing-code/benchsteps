@@ -325,6 +325,7 @@ function homeView() {
       <a class="btn primary" href="#/new">＋ New</a></header>
     <div class="search"><input id="q" type="search" placeholder="Search protocols" value="${esc(homeQuery)}" aria-label="Search protocols"></div>
     <div id="list" class="cards"></div>
+    <p class="ver"><a href="#/settings">BenchSteps v${APP_VERSION}</a></p>
   </div>`;
   renderList();
 }
@@ -614,6 +615,12 @@ function settingsView() {
     </section>
 
     ${deferredInstall ? `<section class="hero"><h2>Install</h2><button class="btn primary" data-a="install">Install BenchSteps on this device</button></section>` : ''}
+
+    <section class="hero"><h2>About</h2>
+      <p>BenchSteps <b>v${APP_VERSION}</b></p>
+      <p class="muted">Updates download in the background; you get the new version the next time you open the app. Use the button to check now.</p>
+      <button class="btn" data-a="checkUpdate">Check for updates</button>
+    </section>
   </div>`;
 }
 
@@ -842,6 +849,24 @@ const A = {
     const token = $('#s-token').value.trim(), gist = $('#s-gist').value.trim();
     if (!token) return toast('Paste a GitHub token first');
     store.sync = { token, gistId: gist || '' }; save(); syncNow(true);
+  },
+  async checkUpdate(el) {
+    el.disabled = true;
+    try {
+      // ?nocache makes the service worker skip its cache and ask the server
+      const text = await (await fetch('version.js?nocache=' + Date.now(), { cache: 'no-store' })).text();
+      const latest = (text.match(/APP_VERSION\s*=\s*'([^']+)'/) || [])[1];
+      if (!latest) throw new Error('bad version file');
+      if (latest === APP_VERSION) return toast(`You're up to date (v${APP_VERSION})`);
+      toast(`Updating to v${latest}…`);
+      const reg = await navigator.serviceWorker?.getRegistration();
+      if (reg) {
+        const swapped = new Promise(res => { navigator.serviceWorker.addEventListener('controllerchange', res, { once: true }); setTimeout(res, 5000); });
+        await reg.update(); await swapped;
+      }
+      location.reload();
+    } catch { toast('Could not check for updates – are you offline?'); }
+    finally { el.disabled = false; }
   },
   awake() {
     store.prefs.keepAwake = !awakeOn(); save();
