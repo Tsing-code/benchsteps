@@ -25,11 +25,88 @@ function minLabel(m) {
 }
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>';
 
+/* ---------- master mix calculator ---------- */
+// A step may carry  calc = { margin: 10, components: [{ name, vol, inMix }] }
+//   vol   = µL per reaction
+//   inMix = false for things added to each well separately (e.g. template) – listed per well, never scaled into the mix.
+// At the bench the user enters samples / replicates / extra wells; mix volumes = vol × wells × (1 + margin/100).
+const CALC_PRESETS = {
+  sybr: { label: 'qPCR – SYBR, 20 µL', margin: 10, components: [
+    { name: '2× SYBR Green master mix', vol: 10, inMix: true },
+    { name: 'Forward primer (10 µM)', vol: 0.4, inMix: true },
+    { name: 'Reverse primer (10 µM)', vol: 0.4, inMix: true },
+    { name: 'Nuclease-free water', vol: 7.2, inMix: true },
+    { name: 'Template (cDNA)', vol: 2, inMix: false }] },
+  taqman: { label: 'qPCR – TaqMan, 20 µL', margin: 10, components: [
+    { name: '2× TaqMan master mix', vol: 10, inMix: true },
+    { name: '20× primer/probe assay', vol: 1, inMix: true },
+    { name: 'Nuclease-free water', vol: 7, inMix: true },
+    { name: 'Template (cDNA)', vol: 2, inMix: false }] },
+  blank: { label: 'Blank', margin: 10, components: [{ name: '', vol: undefined, inMix: true }] }
+};
+const presetCalc = key => structuredClone({ margin: CALC_PRESETS[key].margin, components: CALC_PRESETS[key].components });
+
+function sanitizeCalc(c) {
+  if (!c || typeof c !== 'object') return undefined;
+  const components = (Array.isArray(c.components) ? c.components : []).map(x => ({
+    name: String(x?.name ?? '').trim().slice(0, 80), vol: Number(x?.vol), inMix: x?.inMix !== false
+  })).filter(x => x.name && x.vol > 0);
+  if (!components.length) return undefined;
+  const m = Number(c.margin);
+  return { margin: m >= 0 && m <= 1000 ? m : 10, components };
+}
+
+// Format a volume in µL (up to 2 d.p., trailing zeros trimmed; large values also shown in mL).
+function fmtVol(v) {
+  const r = +v.toFixed(2);
+  return `${r} µL` + (r >= 1000 ? ` (${+(r / 1000).toFixed(3)} mL)` : '');
+}
+function calcCompute(calc, cs) {
+  const int = (x, min) => Math.max(min, Math.floor(Number(x)) || min);
+  const n = Math.max(0, Math.floor(Number(cs.n)) || 0), reps = int(cs.reps, 1), extra = Math.max(0, Math.floor(Number(cs.extra)) || 0);
+  const mRaw = cs.margin === undefined || cs.margin === '' ? calc.margin : Number(cs.margin);
+  const margin = Number.isFinite(mRaw) && mRaw >= 0 ? mRaw : calc.margin;
+  const wells = n * reps + extra, eff = wells * (1 + margin / 100);
+  const rows = calc.components.map((x, j) => ({ j, name: x.name, vol: x.vol, inMix: x.inMix, total: x.inMix ? x.vol * eff : null }));
+  const perWell = calc.components.filter(x => x.inMix).reduce((a, x) => a + x.vol, 0);
+  return { n, reps, extra, margin, wells, eff, rows, perWell, mixTotal: perWell * eff };
+}
+const calcState = (pid, sid) => ((getRun(pid).calc ||= {})[sid] ||= { n: '', reps: 1, extra: 0, open: false, done: {} });
+
+function calcOutHTML(s, cs) {
+  const r = calcCompute(s.calc, cs);
+  if (!r.n) return '<p class="calc-hint">Enter the number of samples to see volumes.</p>';
+  const mixRows = r.rows.filter(x => x.inMix), wellRows = r.rows.filter(x => !x.inMix);
+  return `<p class="calc-sum">${r.n} sample${r.n === 1 ? '' : 's'}${r.reps > 1 ? ` × ${r.reps} replicates` : ''}${r.extra ? ` + ${r.extra} extra` : ''}
+      = <b>${r.wells} wells</b> · mix made for <b>${+r.eff.toFixed(2)}</b> reactions (+${+r.margin.toFixed(2)}%)</p>
+    <ul class="calc-rows">${mixRows.map(x => `
+      <li class="${cs.done[x.j] ? 'done' : ''}" data-a="calcTick" data-sid="${s.id}" data-j="${x.j}">
+        <span class="tick">${CHECK}</span><span class="cname">${esc(x.name)}</span>
+        <span class="cper">${+x.vol.toFixed(3)} µL ×</span><span class="ctot">${fmtVol(x.total)}</span></li>`).join('')}
+    </ul>
+    <p class="calc-total">Master mix total <b>${fmtVol(r.mixTotal)}</b> → dispense <b>${fmtVol(r.perWell)}</b> per well</p>
+    ${wellRows.map(x => `<p class="calc-well">Then add <b>${fmtVol(x.vol)}</b> ${esc(x.name)} to each well</p>`).join('')}`;
+}
+function calcHTML(pid, s, forceOpen) {
+  if (!s.calc) return '';
+  const cs = calcState(pid, s.id);
+  if (!forceOpen && !cs.open) return `<button class="timer-btn calc-btn" data-a="calcToggle" data-sid="${s.id}">🧪 Master mix calculator</button>`;
+  return `<div class="calc" data-sid="${s.id}">
+    <div class="calc-head"><b>🧪 Master mix calculator</b>${forceOpen ? '' : `<button class="link" data-a="calcToggle" data-sid="${s.id}">Hide</button>`}</div>
+    <div class="calc-inputs">
+      <label>Samples<input type="number" inputmode="numeric" min="0" step="1" data-cf="n" value="${esc(cs.n)}" placeholder="0"></label>
+      <label>Replicates<input type="number" inputmode="numeric" min="1" step="1" data-cf="reps" value="${esc(cs.reps)}"></label>
+      <label>Extra wells<input type="number" inputmode="numeric" min="0" step="1" data-cf="extra" value="${esc(cs.extra)}" title="e.g. no-template control, standards"></label>
+      <label>Margin %<input type="number" inputmode="decimal" min="0" step="any" data-cf="margin" value="${esc(cs.margin ?? s.calc.margin)}"></label>
+    </div>
+    <div class="calc-out">${calcOutHTML(s, cs)}</div></div>`;
+}
+
 /* ---------- store ---------- */
 const KEY = 'benchsteps.v1';
 
 function seedProtocols() {
-  const s = (text, note, minutes) => ({ id: uid(), text, note: note || '', minutes });
+  const s = (text, note, minutes, calc) => ({ id: uid(), text, note: note || '', minutes, calc });
   return [
     {
       id: 'seed-miniprep', title: 'Plasmid miniprep (spin column)', updatedAt: 0,
@@ -56,6 +133,18 @@ function seedProtocols() {
         s('Make up to 1 L with dH₂O'),
         s('Autoclave or filter-sterilise', 'Liquid cycle, 20 min'),
         s('Label bottle and store at room temperature', 'Name, date, initials')
+      ]
+    },
+    {
+      id: 'seed-qpcr', title: 'qPCR plate setup (SYBR)', updatedAt: 0,
+      description: 'Example protocol with a master mix calculator – edit or delete it. Volumes are typical starting points; check your master mix and primer concentrations.',
+      steps: [
+        s('Thaw reagents and keep on ice, protected from light', 'Vortex and briefly spin primers and cDNA'),
+        s('Prepare the master mix', 'Enter your sample count, replicates and any extra wells (e.g. no-template control)', undefined, presetCalc('sybr')),
+        s('Dispense master mix into each well', 'Reverse-pipette to avoid bubbles'),
+        s('Add template to each well', 'Use water for the no-template control'),
+        s('Seal the plate and spin briefly', 'e.g. 1 min at 1,000 g', 1),
+        s('Load the plate and start the run', 'Use the cycling program for your master mix', undefined)
       ]
     }
   ];
@@ -93,7 +182,7 @@ function sanitizeProtocol(p) {
   const steps = (Array.isArray(p.steps) ? p.steps : []).map(s => {
     if (typeof s === 'string') s = { text: s };
     const m = Number(s?.minutes);
-    return { id: String(s?.id || uid()), text: String(s?.text ?? '').trim(), note: String(s?.note ?? '').trim(), minutes: m > 0 ? m : undefined, optional: s?.optional ? true : undefined };
+    return { id: String(s?.id || uid()), text: String(s?.text ?? '').trim(), note: String(s?.note ?? '').trim(), minutes: m > 0 ? m : undefined, optional: s?.optional ? true : undefined, calc: sanitizeCalc(s?.calc) };
   }).filter(s => s.text);
   const title = String(p.title ?? '').trim();
   if (!title) return null;
@@ -294,6 +383,7 @@ function runView(p) {
           <div class="timer-slot"></div>
         </div>
         <button class="icon-btn sm" data-a="focusAt" data-i="${i}" aria-label="Focus on step ${i + 1}" title="Focus on this step">⛶</button>
+        <div class="calc-slot" data-sid="${s.id}">${calcHTML(p.id, s)}</div>
       </li>`).join('')}</ol>`
       : `<div class="empty">This protocol has no steps yet.<br><a class="link" href="#/p/${encodeURIComponent(p.id)}/edit">Add some</a></div>`}
     <div id="finish" class="finish" hidden><p>All required steps ticked 🎉</p><button class="btn primary" data-a="finish">Finish &amp; log run</button></div>
@@ -373,6 +463,7 @@ function renderFocus() {
       <div class="focus-text">${esc(s.text)}</div>
       ${s.note ? `<div class="focus-note">${esc(s.note)}</div>` : ''}
       <div class="timer-slot">${timerHTML(p.id, s)}</div>
+      <div class="calc-slot">${calcHTML(p.id, s, true)}</div>
       ${next ? `<div class="focus-next">Next: ${esc(next.text.length > 90 ? next.text.slice(0, 90) + '…' : next.text)}</div>` : ''}
     </div></main>
     <footer class="focus-nav">
@@ -406,7 +497,36 @@ function syncDraft() {
     const m = parseFloat($('.se-minutes', li).value);
     s.minutes = m > 0 ? m : undefined;
     s.optional = $('.se-optional', li).checked || undefined;
+    if (s.calc) {
+      const mg = parseFloat($('.cc-margin', li).value);
+      s.calc.margin = mg >= 0 ? mg : 10;
+      s.calc.components = $$('.cc-row', li).map(row => {
+        const v = parseFloat($('.cc-vol', row).value);
+        return { name: $('.cc-name', row).value, vol: v > 0 ? v : undefined, inMix: $('.cc-mix', row).checked };
+      });
+    }
   });
+}
+function calcEditHTML(s, i) {
+  if (!s.calc) {
+    return `<div class="calc-add"><span class="muted">🧪 Master mix calculator:</span>
+      <button class="timer-btn" data-a="calcAdd" data-i="${i}" data-preset="sybr">qPCR SYBR</button>
+      <button class="timer-btn" data-a="calcAdd" data-i="${i}" data-preset="taqman">qPCR TaqMan</button>
+      <button class="timer-btn ghost" data-a="calcAdd" data-i="${i}" data-preset="blank">Blank</button></div>`;
+  }
+  return `<div class="calc-edit">
+    <div class="ce-head"><b>🧪 Master mix calculator</b><button class="link" data-a="calcRemove" data-i="${i}">Remove</button></div>
+    <p class="muted ce-help">Volumes are µL <b>per reaction</b>. Untick “in mix” for anything added to each well separately (e.g. template).</p>
+    ${s.calc.components.map((c, j) => `
+      <div class="cc-row">
+        <input class="cc-name" type="text" placeholder="Component" value="${esc(c.name)}" aria-label="Component name">
+        <input class="cc-vol" type="number" min="0" step="any" inputmode="decimal" placeholder="µL" value="${c.vol ?? ''}" aria-label="Volume per reaction (µL)">
+        <label class="cc-mixlbl"><input type="checkbox" class="cc-mix" ${c.inMix !== false ? 'checked' : ''}> in mix</label>
+        <button class="icon-btn sm" data-a="ccDel" data-i="${i}" data-j="${j}" aria-label="Remove component">✕</button>
+      </div>`).join('')}
+    <div class="ce-foot"><button class="timer-btn ghost" data-a="ccAdd" data-i="${i}">＋ Component</button>
+      <label class="ce-margin">Safety margin <input class="cc-margin" type="number" min="0" step="any" inputmode="decimal" value="${s.calc.margin ?? 10}"> %</label></div>
+  </div>`;
 }
 function autosize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 4 + 'px'; }
 function renderEditor() {
@@ -432,6 +552,7 @@ function renderEditor() {
           <input class="se-note" type="text" placeholder="Note, volume, reagent… (optional)" value="${esc(s.note)}">
           <input class="se-minutes" type="number" min="0" step="any" inputmode="decimal" placeholder="⏱ min" value="${s.minutes ?? ''}" aria-label="Timer minutes">
         </div>
+        ${calcEditHTML(s, i)}
       </li>`).join('')}</ol>
     <div class="add-row"><button class="btn" data-a="add">＋ Add step</button><button class="btn" data-a="paste">Paste steps…</button></div>
     ${view.isNew ? '' : `<div class="danger-zone"><button class="btn" data-a="duplicate">Duplicate</button><button class="btn danger" data-a="deleteP">Delete protocol</button></div>`}
@@ -670,6 +791,30 @@ const A = {
   },
   up(el) { move(+el.dataset.i, -1); },
   down(el) { move(+el.dataset.i, 1); },
+  calcAdd(el) { syncDraft(); draft.steps[+el.dataset.i].calc = presetCalc(el.dataset.preset); dirty = true; renderEditor(); },
+  calcRemove(el) {
+    syncDraft(); const s = draft.steps[+el.dataset.i];
+    if (s.calc.components.some(c => c.name || c.vol) && !confirm('Remove the calculator from this step?')) return;
+    delete s.calc; dirty = true; renderEditor();
+  },
+  ccAdd(el) { syncDraft(); draft.steps[+el.dataset.i].calc.components.push({ name: '', vol: undefined, inMix: true }); dirty = true; renderEditor(); const n = $$('.step-edit')[+el.dataset.i].querySelectorAll('.cc-name'); n[n.length - 1].focus(); },
+  ccDel(el) {
+    syncDraft(); const c = draft.steps[+el.dataset.i].calc.components; c.splice(+el.dataset.j, 1);
+    if (!c.length) c.push({ name: '', vol: undefined, inMix: true });
+    dirty = true; renderEditor();
+  },
+
+  /* run-time calculator */
+  calcToggle(el) {
+    const cs = calcState(view.pid, el.dataset.sid); cs.open = !cs.open; save();
+    const slot = $(`.calc-slot[data-sid="${el.dataset.sid}"]`);
+    if (slot) slot.innerHTML = calcHTML(view.pid, getP(view.pid).steps.find(x => x.id === el.dataset.sid));
+  },
+  calcTick(el) {
+    const cs = calcState(view.pid, el.dataset.sid), j = el.dataset.j;
+    if (cs.done[j]) delete cs.done[j]; else cs.done[j] = true;
+    save(); el.classList.toggle('done', !!cs.done[j]);
+  },
   paste() { $('#pasteText').value = ''; $('#pasteDlg').showModal(); $('#pasteText').focus(); },
   save: saveDraft,
   cancel() {
@@ -724,6 +869,12 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('input', e => {
   if (e.target.id === 'q') { homeQuery = e.target.value; renderList(); }
+  else if (e.target.dataset.cf) { // calculator inputs: update results in place so typing isn't interrupted
+    const box = e.target.closest('.calc'), s = getP(view.pid)?.steps.find(x => x.id === box?.dataset.sid);
+    if (!s) return;
+    const cs = calcState(view.pid, s.id); cs[e.target.dataset.cf] = e.target.value; save();
+    $('.calc-out', box).innerHTML = calcOutHTML(s, cs);
+  }
   else if (view.name === 'edit') { dirty = true; if (e.target.classList.contains('se-text')) autosize(e.target); }
 });
 document.addEventListener('change', e => {

@@ -9,6 +9,8 @@ A small offline-first app for running lab protocols at the bench. Works in any m
 - **Focus mode** – one step at a time in large text. `✓ Done · Next`, Back, Skip, swipe left/right on a phone, arrow keys / Enter / Space on desktop. `A−` / `A+` change text size.
 - **Step timers** – give any step a duration; start it from the checklist or focus mode. Beeps + vibrates when finished and shows a banner.
 - **Screen stays on** while a protocol is open, in both checklist and focus mode (where the browser supports Wake Lock). On by default; toggle it with the ☀ button on the protocol screen or in ⚙ Settings.
+- **Optional steps** – tag a step as optional; it doesn't count toward progress or block finishing.
+- **Master mix calculator** – attach one to any step (presets for qPCR SYBR / TaqMan, or build your own). At the bench enter samples, replicates and extra wells (e.g. no-template control); it gives the volume of each component for the whole mix, with a safety margin (default 10%, editable), plus the per-well dispense volume. Components marked "not in mix" (e.g. template) are listed per well. Preset volumes are typical starting points – check them against your kit and primer concentrations.
 - **Run log** – "Finish & log run" records completion and resets the checklist.
 - **Offline** after the first load.
 - **Sync between devices** (optional) via a private GitHub Gist, plus JSON export/import.

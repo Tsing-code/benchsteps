@@ -156,6 +156,67 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .timer.run { color: var(--accent); }
 .timer.done { color: var(--accent); font-size: 1rem; }
 
+/* ---------- master mix calculator ---------- */
+.calc-slot:not(:empty) { margin: 4px 4px 6px 0; }
+.step > .calc-slot { grid-column: 1 / -1; }
+.calc-btn { text-align: left; }
+.calc {
+  background: var(--accent-soft); border: 1px solid var(--accent); border-radius: var(--radius);
+  padding: 12px; display: grid; gap: 10px;
+}
+.calc-head { display: flex; justify-content: space-between; align-items: center; }
+.calc-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.calc-inputs label { display: grid; gap: 4px; font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.calc-inputs input {
+  width: 100%; min-height: 48px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); font-size: 1.15rem; font-weight: 700;
+}
+.calc-out p { margin: 0; }
+.calc-hint { color: var(--muted); }
+.calc-sum { font-size: .92rem; color: var(--muted); margin-bottom: 8px !important; }
+.calc-sum b { color: var(--text); }
+.calc-rows { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.calc-rows li {
+  display: grid; grid-template-columns: 30px 1fr auto auto; gap: 8px; align-items: center;
+  min-height: 48px; padding: 6px 10px 6px 8px; border-radius: 10px; background: var(--surface);
+  border: 1px solid var(--line); cursor: pointer;
+}
+.calc-rows .tick { width: 26px; height: 26px; border: 2px solid var(--muted); border-radius: 8px; color: transparent; display: grid; place-items: center; }
+.calc-rows .tick svg { width: 18px; height: 18px; }
+.calc-rows li.done .tick { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.calc-rows li.done .cname, .calc-rows li.done .ctot { text-decoration: line-through; color: var(--muted); }
+.calc-rows .cname { font-weight: 600; overflow-wrap: break-word; min-width: 0; }
+.calc-rows .cper { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.calc-rows .ctot { font-weight: 800; font-size: 1.1rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.calc-total { font-size: 1.02rem; }
+.calc-well { margin-top: 4px !important; }
+@media (max-width: 420px) {
+  .calc-rows li { grid-template-columns: 30px 1fr auto; }
+  .calc-rows .cper { display: none; }
+}
+.focus .calc { padding: 16px; }
+.focus .calc-slot:not(:empty) { margin-top: 24px; }
+.focus .calc-rows li { min-height: 58px; }
+.focus .calc-rows .cname, .focus .calc-rows .ctot { font-size: 1.2rem; }
+.focus .calc-total, .focus .calc-well { font-size: 1.15rem; }
+
+/* editor side */
+.calc-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.calc-edit { margin-top: 12px; padding: 10px; border: 1px dashed var(--accent); border-radius: 12px; display: grid; gap: 8px; }
+.ce-head { display: flex; justify-content: space-between; align-items: center; }
+.ce-help { margin: 0; font-size: .88rem; }
+.cc-row { display: grid; grid-template-columns: 1fr 84px auto 44px; gap: 6px; align-items: center; }
+.cc-mixlbl { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--muted); white-space: nowrap; }
+.cc-mixlbl input { width: 22px; height: 22px; accent-color: var(--accent); }
+.ce-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.ce-margin { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--muted); }
+.ce-margin input { width: 72px !important; }
+@media (max-width: 480px) {
+  .cc-row { grid-template-columns: 1fr 76px 44px; }
+  .cc-mixlbl { grid-column: 1 / 3; grid-row: 2; }
+  .cc-row .icon-btn { grid-row: 1; grid-column: 3; }
+}
+
 /* ---------- focus mode ---------- */
 .focus { height: 100dvh; display: flex; flex-direction: column; max-width: 980px; margin: 0 auto; }
 .focus-top {
